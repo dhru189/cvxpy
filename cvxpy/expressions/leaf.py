@@ -15,7 +15,8 @@ limitations under the License.
 """
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Iterable, Optional
+from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from cvxpy import Constant, Parameter, Variable
@@ -116,8 +117,8 @@ class Leaf(expression.Expression):
         self._shape = shape
         super(Leaf, self).__init__()
 
-        if (PSD or NSD or symmetric or diag or hermitian) and (len(shape) != 2
-                                                               or shape[0] != shape[1]):
+        if (PSD or NSD or symmetric or diag or hermitian) and (len(shape) < 2
+                                                               or shape[-2] != shape[-1]):
             raise ValueError("Invalid dimensions %s. Must be a square matrix."
                              % (shape,))
 
@@ -453,7 +454,7 @@ class Leaf(expression.Expression):
             return np.minimum(val, 0.)
         elif self.attributes['nonneg'] or self.attributes['pos']:
             return np.maximum(val, 0.)
-        elif self.attributes['bounds']:
+        elif self.bounds is not None:
             if any(isinstance(b, expression.Expression) for b in self.bounds):
                 # Cannot project with expression bounds; return as-is.
                 return val
@@ -522,7 +523,7 @@ class Leaf(expression.Expression):
             self._value = val
 
     @property
-    def value(self) -> Optional[np.ndarray]:
+    def value(self) -> np.ndarray | None:
         """The numeric value of the expression."""
         if self.sparse_idx is None:
             return self._value
@@ -543,7 +544,7 @@ class Leaf(expression.Expression):
         self.save_value(self._validate_value(val))
 
     @property
-    def value_sparse(self) -> Optional[...]:
+    def value_sparse(self) -> sp.coo_array | None:
         """The numeric value of the expression if it is a sparse variable."""
         if self._value is None:
             return None
