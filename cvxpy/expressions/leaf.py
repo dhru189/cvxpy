@@ -117,8 +117,8 @@ class Leaf(expression.Expression):
         self._shape = shape
         super(Leaf, self).__init__()
 
-        if (PSD or NSD or symmetric or diag or hermitian) and (len(shape) < 2
-                                                               or shape[-2] != shape[-1]):
+        if (PSD or NSD or symmetric or diag or hermitian) and (len(shape) != 2
+                                                               or shape[0] != shape[1]):
             raise ValueError("Invalid dimensions %s. Must be a square matrix."
                              % (shape,))
 
@@ -454,7 +454,7 @@ class Leaf(expression.Expression):
             return np.minimum(val, 0.)
         elif self.attributes['nonneg'] or self.attributes['pos']:
             return np.maximum(val, 0.)
-        elif self.bounds is not None:
+        elif self.attributes['bounds']:
             if any(isinstance(b, expression.Expression) for b in self.bounds):
                 # Cannot project with expression bounds; return as-is.
                 return val
@@ -465,12 +465,12 @@ class Leaf(expression.Expression):
             return val.astype(complex)
         elif self.attributes['boolean']:
             if hasattr(self, "boolean_idx"):
-                new_val = np.atleast_1d(val.astype(np.float64, copy=True))
+                new_val = np.atleast_1d(np.array(val).astype(np.float64, copy=True))
                 new_val[self.boolean_idx] = np.round(np.clip(new_val[self.boolean_idx], 0., 1.))
                 return new_val.reshape(val.shape) if val.ndim == 0 else new_val
         elif self.attributes['integer']:
             if hasattr(self, "integer_idx"):
-                new_val = np.atleast_1d(val.astype(np.float64, copy=True))
+                new_val = np.atleast_1d(np.array(val).astype(np.float64, copy=True))
                 new_val[self.integer_idx] = np.round(new_val[self.integer_idx])
                 return new_val.reshape(val.shape) if val.ndim == 0 else new_val
         elif self.attributes['diag']:
@@ -480,12 +480,12 @@ class Leaf(expression.Expression):
                 val = np.diag(val)
             return sp.diags_array([val], offsets=[0])
         elif self.attributes['hermitian']:
-            return (val + np.conj(np.swapaxes(val, -2, -1)))/2.
+            return (val + np.conj(val).T)/2.
         elif any([self.attributes[key] for
                   key in ['symmetric', 'PSD', 'NSD']]):
             if val.dtype.kind in 'ib':
                 val = val.astype(float)
-            val = val + np.swapaxes(val, -2, -1)
+            val = val + val.T
             val /= 2.
             if self.attributes['symmetric']:
                 return val
@@ -500,7 +500,7 @@ class Leaf(expression.Expression):
                 if not bad.any():
                     return val
                 w[bad] = 0
-            return (V * w[..., np.newaxis, :]) @ np.swapaxes(V, -2, -1)
+            return (V * w).dot(V.T)
         elif self.attributes['sparsity'] and not sparse_path:
             warn('Accessing a sparse CVXPY expression via a dense representation.'
                   ' Please report this as a bug to the CVXPY Discord or GitHub.',
@@ -544,7 +544,7 @@ class Leaf(expression.Expression):
         self.save_value(self._validate_value(val))
 
     @property
-    def value_sparse(self) -> sp.coo_array | None:
+    def value_sparse(self) -> ... | None:
         """The numeric value of the expression if it is a sparse variable."""
         if self._value is None:
             return None
